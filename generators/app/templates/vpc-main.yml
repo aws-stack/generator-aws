@@ -1,0 +1,34 @@
+---
+- set_fact:
+  args:
+    subnet:
+      cidr: "{{ item.value }}"
+      az: "{{ project.region + item.key[-1] }}"
+      resource_tags:
+        Name: "{{ project.name }}-{{item.key}}"
+  with_dict: "{{ project.subnets }}"
+  register: subnets
+  tags:
+    - network
+
+- set_fact: subnets="{{subnets.results | map(attribute='ansible_facts.subnet') | list }}"
+  tags:
+    - network
+
+- name: "Create project VPC"
+  local_action:
+    module: ec2_vpc
+    state: present
+    region: "{{ project.region }}"
+    cidr_block: "{{ project.vpc_cidr }}"
+    subnets: "{{ subnets }}"
+    internet_gateway: True
+    resource_tags:
+      Environment: "{{ project.env }}"
+      Name: "{{ project.name }}"
+    wait: yes
+  register: awsvpc
+  tags:
+    - network
+
+

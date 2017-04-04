@@ -1,0 +1,17 @@
+- hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars_prompt:
+    - name: project_name
+      prompt: What is the project to be launched?
+      when: project_name is undefined
+
+  pre_tasks:
+    - include_vars: "../projects/{{ project_name }}.yml"
+      tags: [always]
+
+  roles:
+    - role: vpc
+      tags: [always]
+

@@ -1,0 +1,18 @@
+{
+  "name": "generator-aws",
+  "version": "0.1.0",
+  "description": "",
+  "files": [
+    "generators"
+  ],
+  "keywords": [
+    "yeoman-generator",
+    "aws",
+    "generator-aws"
+  ],
+  "dependencies": {
+    "js-yaml": "^3.8.2",
+    "node-cidr": "^0.1.6",
+    "yeoman-generator": "^1.8.0"
+  }
+}
