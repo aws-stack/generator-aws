@@ -3,10 +3,10 @@
   args:
     subnet:
       cidr: "{{ item.value }}"
-      az: "{{ project.region + item.key[-1] }}"
+      az: "{{ stack.region + item.key[-1] }}"
       resource_tags:
-        Name: "{{ project.name }}-{{item.key}}"
-  with_dict: "{{ project.subnets }}"
+        Name: "{{ stack.name }}-{{item.key}}"
+  with_dict: "{{ stack.subnets }}"
   register: subnets
   tags:
     - network
@@ -15,17 +15,17 @@
   tags:
     - network
 
-- name: "Create project VPC"
+- name: "Stack's VPC is created"
   local_action:
     module: ec2_vpc
     state: present
-    region: "{{ project.region }}"
-    cidr_block: "{{ project.vpc_cidr }}"
+    region: "{{ stack.region }}"
+    cidr_block: "{{ stack.vpc_cidr }}"
     subnets: "{{ subnets }}"
     internet_gateway: True
     resource_tags:
-      Environment: "{{ project.env }}"
-      Name: "{{ project.name }}"
+      Environment: "{{ stack.env }}"
+      Name: "{{ stack.name }}"
     wait: yes
   register: awsvpc
   tags:

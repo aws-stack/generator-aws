@@ -1,4 +1,4 @@
-project:
+stack:
   name: <%= data.name %>
   region: <%= data.region %>
   env: <%= data.env %>

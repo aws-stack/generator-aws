@@ -55,8 +55,8 @@ DEVICE_NAMES = [
     "/dev/xvdz",
 ];
 
-function loadProject(path, project_name) {
-    return yaml.safeLoad(fs.readFileSync(path+'/projects/'+project_name+'.yml'));
+function loadStack(path, stack_name) {
+    return yaml.safeLoad(fs.readFileSync(path+'/stacks/'+stack_name+'/main.yml'));
 };
 
 function validateTag(tag) {
@@ -76,14 +76,12 @@ function validateInstanceIp(ip) {
 module.exports = class extends Generator {
   constructor(args,opts) {
       super(args,opts);
-      this.argument('project', { type: String, required: true });
+      this.argument('stack', { type: String, required: true });
       this.answers = {};
-      this.volumes = {};
-      this.volIndex = 0;
+      this.volumes = [];
   }
   initializing() {
-      this.project = loadProject(this.destinationRoot(), this.options['project']);
-      this.log(Object.keys(this.project.project.subnets));
+      this.stack = loadStack(this.destinationRoot(), this.options['stack']);
   };
   instancePrompt() {
     var done = this.async();
@@ -94,7 +92,7 @@ module.exports = class extends Generator {
       validate: validateTag
     }, {
       type    : 'input', // list didn't work well here because there are too many options
-      name    : 'instanceType',
+      name    : 'instance_type',
       message : 'What is the instance type for the new instance?',
       default : 't2.micro',
       validate: validateInstanceType
@@ -109,19 +107,19 @@ module.exports = class extends Generator {
       required: true
     }, {
       type    : 'confirm',
-      name    : 'fixedIp',
+      name    : 'fixed_ip',
       message : 'Shall I assign a fixed private IP to this instance?'
     }, {
       type    : 'list',
       name    : 'subnet',
       message : 'Which subnet is best suited for this instance?',
-      choices : Object.keys(this.project.project.subnets),
-      when    : function(ans) { return ans.fixedIp }
+      choices : Object.keys(this.stack.stack.subnets),
+      when    : function(ans) { return ans.fixed_ip }
     }, {
       type    : 'input',
       name    : 'privateIp',
       message : 'What IP should I assign to the instance?',
-      when    : function(ans) { return ans.fixedIp },
+      when    : function(ans) { return ans.fixed_ip },
       validate: validateInstanceIp
     }, {
       type    : 'list',
@@ -159,6 +157,11 @@ module.exports = class extends Generator {
           name   : 'vol_'+volIndex+'_size',
           message: "Size of the volume"
       }, {
+          type   : 'confirm',
+          name   : 'vol_'+volIndex+'_delete',
+          message: "Should this volume be deleted when the instance is terminated?",
+          default: false
+      }, {
           type   : 'list',
           choices: DEVICE_NAMES,
           name   : 'vol_'+volIndex+'_device',
@@ -175,17 +178,39 @@ module.exports = class extends Generator {
           message: "Add another volume?"
       }];
       return this.prompt(volQuestion).then((answers) => {
-          this.volumes = Object.assign(this.volumes, answers);
+          this.volumes.push({
+              'name': answers['vol_'+volIndex+'_name'],
+              'device_name': answers['vol_'+volIndex+'_device'],
+              'size': answers['vol_'+volIndex+'_size'],
+              'type': answers['vol_'+volIndex+'_type'],
+              'delete_on_termination': answers['vol_'+volIndex+'_delete'],
+          });
           if (answers.add_another) {
               this._setupVolumes(done, ++volIndex);
           } else done();
       });
   };
 
-  createInstance() {
-      this.log(yaml.safeDump(this.answers));
-      this.log(yaml.safeDump(this.volumes));
-  }
-};
+  prepareData() {
+      delete this.answers.setup_volumes;
+      this.answers.volumes = this.volumes;
+      var data = {};
+      data[this.answers.name] = this.answers;
+      this.instance_data = data;
+  };
 
+  createInstance() {
+      this.log(yaml.safeDump(this.instance_data));
+      this.fs.write(
+              this.destinationPath('stacks/'+this.options['stack']+'/'+this.answers.name+'.yml'),
+              yaml.safeDump(this.instance_data));
+      this.fs.copyTpl(
+              this.templatePath('instance-meta.yml'),
+              this.destinationPath('infrastructure/roles/'+this.answers.name+'/meta/main.yml'),
+              { name: this.answers.name } );
+      this.fs.write(
+              this.destinationPath('deploy/roles/'+this.options['stack']+'/'+this.answers.name+'/tasks/main.yml'),
+              '---\n');
+  };
+};
 

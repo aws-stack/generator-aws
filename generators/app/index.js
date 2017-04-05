@@ -81,27 +81,28 @@ module.exports = class extends Generator {
     var questions = [{
       type    : 'input',
       name    : 'name',
-      message : 'Project name:'
+      message : 'Stack name:'
     }, {
-      type    : 'input',
+      type    : 'choice',
+      choices : AWS_REGIONS,
       name    : 'region',
-      message : 'Project region:'
+      message : 'In which AWS region this stack will live?'
     }, {
       type    : 'input',
       name    : 'env',
-      message : 'Environment name(prod/qa/dev):',
+      message : 'Environment (ex: prod/qa/dev):',
       default : 'prod'
     }, {
       type    : 'input',
       name    : 'vpc_cidr',
-      message : 'What\'s the project VPC CIDR (ex.: 10.0.0.0/16)?',
+      message : 'What CIDR block should we use to create this stack?',
       default : '10.0.0.0/16',
       validate: this._validate_cidr.bind(this)
     }, {
       type    : 'input',
       name    : 'subnet_count',
-      message : 'How many subnets would you like to have?',
-      default : 1
+      message : 'How many subnets would you like to add?',
+      default : 2
     }];
     return this.prompt(questions).then((answers) => {
       this.answers = answers;
@@ -126,8 +127,8 @@ module.exports = class extends Generator {
 
   createVPC() {
       this.fs.copyTpl(
-              this.templatePath('project.tpl'),
-              this.destinationPath('projects/'+this.answers.name+'.yml'),
+              this.templatePath('stack.tpl'),
+              this.destinationPath('stacks/'+this.answers.name+'/main.yml'),
               { 'data': this.answers }
               );
       this.fs.copy(
