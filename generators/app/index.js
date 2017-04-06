@@ -131,9 +131,11 @@ module.exports = class extends Generator {
               this.destinationPath('stacks/'+this.answers.name+'/main.yml'),
               { 'data': this.answers }
               );
-      this.fs.copy(
-              this.templatePath('vpc-main.yml'),
-              this.destinationPath('infrastructure/roles/vpc/tasks/main.yml'));
+      this.spawnCommand('ansible-galaxy', [
+              'install',
+              '--roles-path', this.destinationPath('infrastructure/roles'),
+              'git+https://github.com/aws-stack/vpc'
+            ]);
       this.fs.copy(
               this.templatePath('create-vpc.yml'),
               this.destinationPath('infrastructure/create-vpc.yml'));
