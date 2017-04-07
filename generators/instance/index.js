@@ -55,6 +55,18 @@ DEVICE_NAMES = [
     "/dev/xvdz",
 ];
 
+EC2_TYPE_CHOICES = [
+    { name: 'Single Instance', value: 'instance' },
+    { name: 'Group of instances', value: 'group' },
+    { name: 'Auto scaling group', value: 'autoscaling' }
+];
+
+IP_CHOICES = [
+  { name: 'No public IP', value: 'none'},
+  { name: 'Elastic IP', value: 'eip' },
+  { name: 'Random public IP', value: 'public' }
+];
+
 function loadStack(path, stack_name) {
     return yaml.safeLoad(fs.readFileSync(path+'/stacks/'+stack_name+'/main.yml'));
 };
@@ -79,6 +91,7 @@ module.exports = class extends Generator {
       this.argument('stack', { type: String, required: true });
       this.answers = {};
       this.volumes = [];
+      this.instance_group = {};
   }
   initializing() {
       this.stack = loadStack(this.destinationRoot(), this.options['stack']);
@@ -86,6 +99,11 @@ module.exports = class extends Generator {
   instancePrompt() {
     var done = this.async();
     var questions = [{
+      type    : 'list',
+      name    : 'ec2_type',
+      choices : EC2_TYPE_CHOICES,
+      message : 'What type of EC2 resources should I create?'
+    }, {
       type    : 'input',
       name    : 'name',
       message : 'How the new instance is going to be called?',
@@ -98,41 +116,17 @@ module.exports = class extends Generator {
       validate: validateInstanceType
     }, {
       type    : 'input',
+      name    : 'security_groups',
+      message : 'Which security groups should I assign to the instance(s)?'
+    }, {
+      type    : 'input',
       name    : 'key_name',
-      message : 'Which key pair should be used in this instance?(empty for none):'
+      message : 'Which key pair should be used in this instance?(empty for key):'
     }, {
       type    : 'input',
       name    : 'ami',
-      message : 'What AMI?',
+      message : 'What AMI should be used for instance creation?',
       required: true
-    }, {
-      type    : 'confirm',
-      name    : 'fixed_ip',
-      message : 'Shall I assign a fixed private IP to this instance?'
-    }, {
-      type    : 'list',
-      name    : 'subnet',
-      message : 'Which subnet is best suited for this instance?',
-      choices : Object.keys(this.stack.stack.subnets),
-      when    : function(ans) { return ans.fixed_ip }
-    }, {
-      type    : 'input',
-      name    : 'privateIp',
-      message : 'What IP should I assign to the instance?',
-      when    : function(ans) { return ans.fixed_ip },
-      validate: validateInstanceIp
-    }, {
-      type    : 'list',
-      name    : 'public_ip_type',
-      choices : [ { name: 'No public IP', value: 'no'},
-                  { name: 'Elastic IP', value: 'eip' },
-                  { name: 'Random public IP', value: 'public' }],
-      message : 'Should we set a public IP to this instance?'
-    }, {
-      type    : 'input',
-      name    : 'eip',
-      message : 'Which pre-existing Elastic IP should be assigned to the instance?',
-      when    : (ans) => { return ans.public_ip_type == "eip"; }
     }, {
       type    : 'confirm',
       name    : 'setup_volumes',
@@ -141,12 +135,106 @@ module.exports = class extends Generator {
     return this.prompt(questions).then((answers) => {
       this.answers = answers;
       if (this.answers.setup_volumes) {
-          this._setupVolumes(done, 0);
-      }
+          this._setupVolumes(0, done);
+      } else done();
     });
   };
 
-  _setupVolumes(done, volIndex) {
+  _instanceQuestions() {
+    return [
+      {
+          type    : 'list',
+          name    : 'subnet',
+          message : 'Which subnet is best suited for this instance?',
+          choices : Object.keys(this.stack.stack.subnets),
+      }, {
+          type    : 'confirm',
+          name    : 'fixed_ip',
+          message : 'Shall I assign a fixed private IP to this instance?'
+      }, {
+          type    : 'input',
+          name    : 'private_ip',
+          message : 'What IP should I assign to the instance?',
+          when    : function(ans) { return ans.fixed_ip },
+          validate: validateInstanceIp
+      }, {
+          type    : 'list',
+          name    : 'public_ip_type',
+          choices : IP_CHOICES,
+          message : 'Should we set a public IP to this instance?'
+      }, {
+          type    : 'input',
+          name    : 'eip',
+          message : 'Which pre-existing Elastic IP should be assigned to the instance?',
+          when    : (ans) => { return ans.public_ip_type == "eip"; }
+      }
+    ];
+  };
+
+  promptingSingleInstance() {
+      if (this.answers.ec2_type != "instance") return;
+      return this.prompt(this._instanceQuestions()).then((answers) => {
+          this.answers = Object.assign(this.answers, answers);
+      });
+  };
+
+  _promptInstanceGroup(done, idx) {
+      var questions = this._instanceQuestions();
+      questions.push(
+              {
+                  type    : 'confirm',
+                  name    : 'more_instances',
+                  message : 'Do you want to add more instances?'
+              });
+
+      return this.prompt(questions).then((answers) => {
+          var instance = {};
+          if (answers.fixed_ip) { instance.private_ip = answers.private_ip };
+          if (answers.public_ip_type == 'eip') { instance.eip = answers.eip }; // TODO: handle ip_type = public
+          if (typeof this.instance_group[answers.subnet] == 'undefined') {
+              this.instance_group[answers.subnet] = [];
+          }
+          this.instance_group[answers.subnet].push(instance);
+          if (answers.more_instances) {
+              this._promptInstanceGroup(done);
+          } else {
+              done();
+          }
+      });
+  };
+
+  promptingInstanceGroup() {
+      if (this.answers.ec2_type != "group") return;
+      var done = this.async();
+      return this._promptInstanceGroup(done);
+  };
+
+  promptingASG() {
+      if (this.answers.ec2_type != "autoscaling") return;
+      let asgQuestions = [
+          {
+              type    : 'checkbox',
+              name    : 'subnets',
+              message : 'In which subnets the autoscaling group should launch instances?',
+              choices : Object.keys(this.stack.stack.subnets)
+          }, {
+              type   : 'input',
+              name   : 'min_size',
+              message: "What's the minimum size of the ASG?",
+              default: "1"
+          }, {
+              type   : 'input',
+              name   : 'max_size',
+              message: "What's the maximum size of the ASG?",
+              default: "2"
+          }
+      ];
+      return this.prompt(asgQuestions).then((answers) => {
+          this.answers = Object.assign(this.answers, answers);
+      });
+  };
+
+  _setupVolumes(volIndex, done) {
       let volQuestion = [{
           type   : 'input',
           name   : 'vol_'+volIndex+'_name',
@@ -186,16 +274,19 @@ module.exports = class extends Generator {
               'delete_on_termination': answers['vol_'+volIndex+'_delete'],
           });
           if (answers.add_another) {
-              this._setupVolumes(done, ++volIndex);
+              this._setupVolumes(++volIndex, done);
           } else done();
       });
   };
 
   prepareData() {
       delete this.answers.setup_volumes;
-      this.answers.volumes = this.volumes;
+      if (this.volumes.length > 0) {
+          this.answers.volumes = this.volumes;
+      }
       var data = {};
-      data[this.answers.name] = this.answers;
+      data.ec2_conf = this.answers;
+      if (Object.keys(this.instance_group).length > 0) data.ec2_conf.group = this.instance_group;
       this.instance_data = data;
   };
 
