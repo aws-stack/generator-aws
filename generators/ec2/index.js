@@ -296,13 +296,14 @@ module.exports = class extends Generator {
       this.fs.write(
               this.destinationPath('stacks/'+this.options['stack']+'/'+this.answers.name+'.yml'),
               yaml.safeDump(this.instance_data));
-      this.fs.copyTpl(
-              this.templatePath('instance-meta.yml'),
-              this.destinationPath('infrastructure/roles/'+this.answers.name+'/meta/main.yml'),
-              { name: this.answers.name } );
-      this.fs.write(
-              this.destinationPath('deploy/roles/'+this.options['stack']+'/'+this.answers.name+'/tasks/main.yml'),
-              '---\n');
+      this.fs.copy(
+              this.templatePath('ec2-launch.yml'),
+              this.destinationPath('infrastructure/ec2-launch.yml'));
+      this.spawnCommand('ansible-galaxy', [
+              'install',
+              '--roles-path', this.destinationPath('infrastructure/roles'),
+              'git+https://github.com/aws-stack/ec2'
+            ]);
       this.answers.security_groups.forEach((sg) => {
           let path = this.destinationPath('stacks/'+this.options['stack']+'/sg-'+sg+'.yml');
           if (!fs.exists(path)) {

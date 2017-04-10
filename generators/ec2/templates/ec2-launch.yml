@@ -1,0 +1,25 @@
+---
+- hosts: localhost
+  gather_facts: false
+  connection: local
+
+  vars_prompt:
+    - name: stack_name
+      prompt: What is the project to be launched?
+      when: stack_name is undefined
+
+    - name: ec2_name
+      prompt: What is name of the ec2 server to be launched?
+      when: ec2_name is undefined
+
+
+  pre_tasks:
+    - include_vars: "../stacks/{{ stack_name }}/main.yml"
+      tags: [always]
+
+    - include_vars: "../stacks/{{ stack_name }}/{{ ec2_name }}.yml"
+      ignore_errors: yes
+      tags: [always]
+
+  roles:
+    - role: ec2

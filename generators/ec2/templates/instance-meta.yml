@@ -1,3 +1,0 @@
----
-dependencies:
-  - { role: server-group, instance_conf: "{{ <%= name %> }}" }
