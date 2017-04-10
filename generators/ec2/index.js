@@ -116,10 +116,6 @@ module.exports = class extends Generator {
       validate: validateInstanceType
     }, {
       type    : 'input',
-      name    : 'security_groups',
-      message : 'Which security groups should I assign to the instance(s)?'
-    }, {
-      type    : 'input',
       name    : 'key_name',
       message : 'Which key pair should be used in this instance?(empty for key):'
     }, {
@@ -128,11 +124,17 @@ module.exports = class extends Generator {
       message : 'What AMI should be used for instance creation?',
       required: true
     }, {
+      type    : 'input',
+      name    : 'security_groups',
+      message : 'Please specify the security group name(s) separated by comma:',
+      required: true
+    }, {
       type    : 'confirm',
       name    : 'setup_volumes',
       message : 'Want to setup volumes now?'
     }];
     return this.prompt(questions).then((answers) => {
+      answers.security_groups = answers.security_groups.split(',');
       this.answers = answers;
       if (this.answers.setup_volumes) {
           this._setupVolumes(0, done);
