@@ -293,7 +293,6 @@ module.exports = class extends Generator {
   };
 
   createInstance() {
-      this.log(yaml.safeDump(this.instance_data));
       this.fs.write(
               this.destinationPath('stacks/'+this.options['stack']+'/'+this.answers.name+'.yml'),
               yaml.safeDump(this.instance_data));
@@ -304,6 +303,13 @@ module.exports = class extends Generator {
       this.fs.write(
               this.destinationPath('deploy/roles/'+this.options['stack']+'/'+this.answers.name+'/tasks/main.yml'),
               '---\n');
+      this.answers.security_groups.forEach((sg) => {
+          let path = this.destinationPath('stacks/'+this.options['stack']+'/sg-'+sg+'.yml');
+          if (!fs.exists(path)) {
+              this.log('Definition file for security group '+sg+' not found in path '+path+
+                       '. Run `yo aws:sg '+this.options.stack+'` to create it');
+          }
+      });
   };
 };
 
