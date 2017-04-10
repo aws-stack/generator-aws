@@ -8,7 +8,7 @@
       when: stack_name is undefined
 
   pre_tasks:
-    - include_vars: "../stacks/{{ stack_name }}.yml"
+    - include_vars: "../stacks/{{ stack_name }}/main.yml"
       tags: [always]
 
   roles:
