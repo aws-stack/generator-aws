@@ -101,7 +101,7 @@ module.exports = class extends Generator {
     }, {
       type    : 'input',
       name    : 'name',
-      message : 'How the new instance is going to be called?',
+      message : "How is it going to be called?",
       validate: validateTag
     }, {
       type    : 'input', // list didn't work well here because there are too many options
@@ -112,7 +112,7 @@ module.exports = class extends Generator {
     }, {
       type    : 'input',
       name    : 'key_name',
-      message : 'Which key pair should be used in this instance?(empty for key):'
+      message : 'Which key pair should be used in this instance?(empty for no key):'
     }, {
       type    : 'input',
       name    : 'ami',
@@ -130,6 +130,7 @@ module.exports = class extends Generator {
     }];
     return this.prompt(questions).then((answers) => {
       answers.security_groups = answers.security_groups.split(',');
+      if (answers.key_name.length == 0) delete answers.key_name;
       this.answers = answers;
       if (this.answers.setup_volumes) {
           this._setupVolumes(0, done);
@@ -172,6 +173,7 @@ module.exports = class extends Generator {
   promptingSingleInstance() {
       if (this.answers.ec2_type != "instance") return;
       return this.prompt(this._instanceQuestions()).then((answers) => {
+          if (answers.private_ip.length == 0) delete answers.private_ip;
           this.answers = Object.assign(this.answers, answers);
       });
   };
@@ -235,28 +237,28 @@ module.exports = class extends Generator {
   _setupVolumes(volIndex, done) {
       let volQuestion = [{
           type   : 'input',
-          name   : 'vol_'+volIndex+'_name',
+          name   : 'name',
           message: "How should I name volume "+ volIndex + "?",
           default: () => { return volIndex == 0 ? 'root' : 'vol'+volIndex; }
       }, {
           type   : 'input',
-          name   : 'vol_'+volIndex+'_size',
+          name   : 'volume_size',
           message: "Size of the volume"
       }, {
           type   : 'confirm',
-          name   : 'vol_'+volIndex+'_delete',
+          name   : 'delete_on_termination',
           message: "Should this volume be deleted when the instance is terminated?",
           default: false
       }, {
           type   : 'list',
           choices: DEVICE_NAMES,
-          name   : 'vol_'+volIndex+'_device',
+          name   : 'device_name',
           message: "Device name for this volume",
           default: volIndex
       }, {
           type   : 'list',
           choices: VOLUME_TYPES,
-          name   : 'vol_'+volIndex+'_type',
+          name   : 'volume_type',
           message: "Type of the volume"
       }, {
           type   : 'confirm',
@@ -265,11 +267,11 @@ module.exports = class extends Generator {
       }];
       return this.prompt(volQuestion).then((answers) => {
           this.volumes.push({
-              'name': answers['vol_'+volIndex+'_name'],
-              'device_name': answers['vol_'+volIndex+'_device'],
-              'size': answers['vol_'+volIndex+'_size'],
-              'type': answers['vol_'+volIndex+'_type'],
-              'delete_on_termination': answers['vol_'+volIndex+'_delete'],
+              'name': answers['name'],
+              'device_name': answers['device_name'],
+              'volume_size': answers['volume_size'],
+              'volume_type': answers['volume_type'],
+              'delete_on_termination': answers['delete_on_termination'],
           });
           if (answers.add_another) {
               this._setupVolumes(++volIndex, done);
