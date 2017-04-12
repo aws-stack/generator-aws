@@ -80,11 +80,6 @@ function validateInstanceType(type) {
   return INSTANCE_TYPES.indexOf(type) > 0 ? true : 'Invalid instance type';
 };
 
-function validateInstanceIp(ip) {
-    //TODO: make sure the IP is inside the CIDR block of the subnet
-    return true;
-}
-
 module.exports = class extends Generator {
   constructor(args,opts) {
       super(args,opts);
@@ -142,28 +137,29 @@ module.exports = class extends Generator {
     });
   };
 
+  _validateInstanceIp(ip, answers) {
+      if (ip.length == 0) return true;
+      let subnet_cidr = new CIDR.Subnetv4(this.stack.stack.subnets[answers.subnet]);
+      return subnet_cidr.includes(new CIDR.IPv4(ip)) || "IP "+ip+" doesn't fall in subnet range "+subnet_cidr.asString;
+  };
+
   _instanceQuestions() {
     return [
       {
           type    : 'list',
           name    : 'subnet',
-          message : 'Which subnet is best suited for this instance?',
+          message : 'In which subnet this instance should be launched?',
           choices : Object.keys(this.stack.stack.subnets),
-      }, {
-          type    : 'confirm',
-          name    : 'fixed_ip',
-          message : 'Shall I assign a fixed private IP to this instance?'
       }, {
           type    : 'input',
           name    : 'private_ip',
-          message : 'What IP should I assign to the instance?',
-          when    : function(ans) { return ans.fixed_ip },
-          validate: validateInstanceIp
+          message : 'Specify the private ip for the instance (or leave empty for automatic):',
+          validate: this._validateInstanceIp.bind(this)
       }, {
           type    : 'list',
           name    : 'public_ip_type',
           choices : IP_CHOICES,
-          message : 'Should we set a public IP to this instance?'
+          message : 'Do it need a public IP?'
       }, {
           type    : 'input',
           name    : 'eip',
@@ -190,15 +186,15 @@ module.exports = class extends Generator {
               });
 
       return this.prompt(questions).then((answers) => {
-          var instance = {};
-          if (answers.fixed_ip) { instance.private_ip = answers.private_ip };
+          var instance = { id: idx };
+          if (answers.private_ip != "") { instance.private_ip = answers.private_ip };
           if (answers.public_ip_type == 'eip') { instance.eip = answers.eip }; // TODO: handle ip_type = public
           if (typeof this.instance_group[answers.subnet] == 'undefined') {
               this.instance_group[answers.subnet] = [];
           }
           this.instance_group[answers.subnet].push(instance);
           if (answers.more_instances) {
-              this._promptInstanceGroup(done);
+              this._promptInstanceGroup(done, idx++);
           } else {
               done();
           }
@@ -208,7 +204,7 @@ module.exports = class extends Generator {
   promptingInstanceGroup() {
       if (this.answers.ec2_type != "group") return;
       var done = this.async();
-      return this._promptInstanceGroup(done);
+      return this._promptInstanceGroup(done, 1);
   };
 
   promptingASG() {
