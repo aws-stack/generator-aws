@@ -65,9 +65,9 @@ module.exports = class extends Generator {
   };
 
   createSG() {
-      this.answers.rules = this.rules;
+      this.answers.sg_rules = this.rules;
       this.fs.write(
-              this.destinationPath('stacks/'+this.options['stack']+'/sg-'+this.answers.sg_name+'.yml'),
+              this.destinationPath('stacks/'+this.options['stack']+'/'+this.answers.sg_name+'.yml'),
               yaml.safeDump(this.answers));
   }
 };
