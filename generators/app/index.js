@@ -83,7 +83,7 @@ module.exports = class extends Generator {
       name    : 'name',
       message : 'Stack name:'
     }, {
-      type    : 'choice',
+      type    : 'list',
       choices : AWS_REGIONS,
       name    : 'region',
       message : 'In which AWS region this stack will live?'
