@@ -31,7 +31,6 @@ INSTANCE_TYPES = [
 VOLUME_TYPES = [ 'gp2', 'io1', 'st1', 'sc1', 'standard' ];
 
 DEVICE_NAMES = [
-    "/dev/sda1",
     "/dev/xvdf",
     "/dev/xvdg",
     "/dev/xvdh",
@@ -215,21 +214,26 @@ module.exports = class extends Generator {
           {
               type    : 'checkbox',
               name    : 'subnets',
-              message : 'In which subnets the autoscaling group should launch instances?',
+              message : 'Choose the subnets where the instances will be launched:',
               choices : Object.keys(this.stack.stack.subnets)
           }, {
               type   : 'input',
               name   : 'min_size',
-              message: "What's the minimum size of the ASG?",
+              message: "Minimum number of instances:",
               default: "1"
           }, {
               type   : 'input',
               name   : 'max_size',
-              message: "What's the maximum size of the ASG?",
+              message: "Maximum number of instances:",
               default: "2"
+          }, {
+              type   : 'input',
+              name   : 'elb_name',
+              message: "Load balancer name(empty for no ELB):"
           }
       ];
       return this.prompt(asgQuestions).then((answers) => {
+          if (answers.elb_name.length == 0) delete answers.elb_name;
           this.answers = Object.assign(this.answers, answers);
       });
   };
@@ -238,39 +242,45 @@ module.exports = class extends Generator {
       let volQuestion = [{
           type   : 'input',
           name   : 'name',
-          message: "How should I name volume "+ volIndex + "?",
+          message: "Volume "+volIndex+" name:",
           default: () => { return volIndex == 0 ? 'root' : 'vol'+volIndex; }
-      }, {
-          type   : 'input',
-          name   : 'volume_size',
-          message: "Size of the volume"
-      }, {
-          type   : 'confirm',
-          name   : 'delete_on_termination',
-          message: "Should this volume be deleted when the instance is terminated?",
-          default: false
-      }, {
-          type   : 'list',
-          choices: DEVICE_NAMES,
-          name   : 'device_name',
-          message: "Device name for this volume",
-          default: volIndex
       }, {
           type   : 'list',
           choices: VOLUME_TYPES,
           name   : 'volume_type',
           message: "Type of the volume"
       }, {
+          type   : 'input',
+          name   : 'volume_size',
+          message: "Volume size:",
+          default: 8
+      }, {
           type   : 'confirm',
-          name   : 'add_another',
-          message: "Add another volume?"
+          name   : 'delete_on_termination',
+          message: "Should this volume be deleted when the instance is terminated?",
+          default: false
       }];
+      if (volIndex > 0) {
+        volQuestion.push({
+              type   : 'list',
+              choices: DEVICE_NAMES,
+              name   : 'device_name',
+              message: "Device name for this volume",
+              default: volIndex
+          });
+      }
+      volQuestion.push({
+              type   : 'confirm',
+              name   : 'add_another',
+              message: "Add another volume?"
+          });
       return this.prompt(volQuestion).then((answers) => {
+          if (volIndex==0) { answers['device_name'] = '/dev/sda1' };
           this.volumes.push({
-              'name': answers['name'],
-              'device_name': answers['device_name'],
-              'volume_size': answers['volume_size'],
-              'volume_type': answers['volume_type'],
+              'name': answers.name,
+              'device_name': answers.device_name,
+              'volume_size': answers.volume_size,
+              'volume_type': answers.volume_type,
               'delete_on_termination': answers['delete_on_termination'],
           });
           if (answers.add_another) {
@@ -291,24 +301,30 @@ module.exports = class extends Generator {
   };
 
   createInstance() {
+      var done = this.async();
       this.fs.write(
               this.destinationPath('stacks/'+this.options['stack']+'/'+this.answers.name+'.yml'),
               yaml.safeDump(this.instance_data));
       this.fs.copy(
               this.templatePath('ec2-launch.yml'),
               this.destinationPath('infrastructure/ec2-launch.yml'));
-      this.spawnCommand('ansible-galaxy', [
-              'install',
-              '--roles-path', this.destinationPath('infrastructure/roles'),
-              'git+https://github.com/aws-stack/ec2'
-            ]);
+      try {
+          this.spawnCommand('ansible-galaxy', [
+                  'install',
+                  '--roles-path', this.destinationPath('infrastructure/roles'),
+                  'git+https://github.com/aws-stack/ec2'
+                ]);
+      } catch (e) {
+          this.log('Error trying to run ansible-galaxy. Please make sure ansible is installed and in your PATH');
+      }
       this.answers.security_groups.forEach((sg) => {
-          let path = this.destinationPath('stacks/'+this.options['stack']+'/sg-'+sg+'.yml');
+          let path = this.destinationPath('stacks/'+this.options['stack']+'/'+sg+'.yml');
           if (!fs.exists(path)) {
               this.log('Definition file for security group '+sg+' not found in path '+path+
                        '. Run `yo aws:sg '+this.options.stack+'` to create it');
           }
       });
+      return done();
   };
 };
 
