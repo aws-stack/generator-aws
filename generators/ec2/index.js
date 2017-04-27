@@ -318,7 +318,7 @@ module.exports = class extends Generator {
           this.log('Error trying to run ansible-galaxy. Please make sure ansible is installed and in your PATH');
       }
       this.answers.security_groups.forEach((sg) => {
-          let path = this.destinationPath('stacks/'+this.options['stack']+'/'+sg+'.yml');
+          let path = this.destinationPath('stacks/'+this.options['stack']+'/security-groups/'+sg+'.yml');
           if (!fs.exists(path)) {
               this.log('Definition file for security group '+sg+' not found in path '+path+
                        '. Run `yo aws:sg '+this.options.stack+'` to create it');
